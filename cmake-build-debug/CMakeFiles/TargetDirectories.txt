@@ -1,0 +1,3 @@
+/home/parallels/Desktop/monitoring_file/cmake-build-debug/CMakeFiles/monitoring_file.dir
+/home/parallels/Desktop/monitoring_file/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/parallels/Desktop/monitoring_file/cmake-build-debug/CMakeFiles/rebuild_cache.dir
