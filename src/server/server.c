@@ -8,15 +8,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-typedef struct fileInfo {
-    char fname[NAME_MAX + 1];
-    long fsize;
-} file_info;
+#include <signal.h>
 
 struct serverOptions
 {
-    char *file_location;
     char *ip_in;
     in_port_t port;
 };
@@ -24,11 +19,15 @@ struct serverOptions
 static void options_init(struct serverOptions *opts);
 static void parse_server_arguments(int argc, char *argv[], struct serverOptions *opts);
 static int log_message(int newSocket, struct serverOptions *opts);
+static void handleCtrlC(int signum);
 
 #define SIZE 1024
-#define DEFAULT_FILE_LOCATION "../server"
+#define DEFAULT_LOG_FILE_LOCATION "../server"
 #define DEFAULT_PORT 5000
 #define MAX_PENDING 10
+
+int server_socket;
+int client_socket;
 
 int main (int argc, char *argv[]) {
     struct serverOptions opts;
@@ -36,18 +35,15 @@ int main (int argc, char *argv[]) {
     options_init(&opts);
     parse_server_arguments(argc, argv, &opts);
 
-    int sockfd, ret;
+    int ret;
     struct sockaddr_in serverAddr;
-
-    int newSocket;
     struct sockaddr_in newAddr;
 
     socklen_t addr_size;
 
     pid_t childip;
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket < 0) {
         error_errno(__FILE__, __func__ , __LINE__, errno, 2);
     }
     printf("[+]Server socket created.\n");
@@ -58,20 +54,25 @@ int main (int argc, char *argv[]) {
     serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     //bind ip address to specific port
-    ret = bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    ret = bind(server_socket, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
     if (ret < 0) {
         error_errno(__FILE__, __func__ , __LINE__, errno, 2);
     }
 
-    if (listen(sockfd, MAX_PENDING) == 0)
+    if (listen(server_socket, MAX_PENDING) == 0)
         printf("Listening...\n");
     else
         error_errno(__FILE__, __func__ , __LINE__, errno, 2);
 
-    while (1) {
-        newSocket = accept(sockfd, (struct sockaddr*)&newAddr, &addr_size);
+    if (signal(SIGINT, handleCtrlC) == SIG_ERR) {
+        fprintf(stderr, "Unable to register signal handler\n");
+        return 1;
+    }
 
-        if (newSocket < 0)
+    while (1) {
+        client_socket = accept(server_socket, (struct sockaddr*)&newAddr, &addr_size);
+
+        if (client_socket < 0)
             error_errno(__FILE__, __func__ , __LINE__, errno, 2);
 
         //set current input ip
@@ -80,29 +81,23 @@ int main (int argc, char *argv[]) {
         printf("[+]Connection accept from %s:%d\n", opts.ip_in, opts.port);
 
         if ((childip = fork()) == 0) {
-            close(sockfd);
+            close(server_socket);
 
-            if (log_message(newSocket, &opts) == 0) {
+            if (log_message(client_socket, &opts) == 0) {
                 printf("Text has been appended to 'log.txt'.\n");
                 break;
             }
         }
     }
 
-    close(newSocket);
+    close(client_socket);
     return EXIT_SUCCESS;
 }
-
 
 static void parse_server_arguments(int argc, char *argv[], struct serverOptions *opts) {
     int c;
     while ((c = getopt(argc, argv, "d:p:")) != -1) {
         switch(c) {
-            case 'd':
-            {
-                opts->file_location = optarg;
-                break;
-            }
             case 'p':
             {
                 opts->port = parse_port(optarg, 10);
@@ -118,8 +113,18 @@ static void parse_server_arguments(int argc, char *argv[], struct serverOptions 
             }
         }
     }
-    printf("[+]File location: %s\n", opts->file_location);
     printf("[+]Port: %hu\n", opts->port);
+}
+
+static void handleCtrlC(int signum) {
+    printf("Ctrl+C detected. Exiting...\n");
+
+    // Close the socket
+    if (close(server_socket) == -1) {
+        perror("Error closing socket");
+    }
+    // Terminate the program
+    exit(signum);
 }
 
 static int log_message(int newSocket, struct serverOptions *opts) {
@@ -132,12 +137,20 @@ static int log_message(int newSocket, struct serverOptions *opts) {
 
     while (1) {
         char buffer[SIZE];
-        //Get the content
         ssize_t bytes_received = recv(newSocket, buffer, sizeof(buffer), 0);
-        if (bytes_received == -1) {
-            perror("Error receiving data");
-            exit(EXIT_FAILURE);
+        if (bytes_received <= 0) {
+            if (bytes_received == 0) {
+                printf("Client disconnected.\n");
+            } else {
+                perror("Error receiving data");
+            }
+
+            // Cleanup and close the socket
+            close(client_socket);
+            close(server_socket);
+            exit(EXIT_SUCCESS);
         }
+
         printf("Received message from client: %.*s\n", (int)bytes_received, buffer);
 
         FILE *file;
@@ -153,5 +166,4 @@ static int log_message(int newSocket, struct serverOptions *opts) {
 static void options_init(struct serverOptions *opts) {
     memset(opts, 0, sizeof(struct serverOptions));
     opts->port  = DEFAULT_PORT;
-    opts->file_location = DEFAULT_FILE_LOCATION;
 }

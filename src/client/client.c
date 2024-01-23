@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <sys/inotify.h>
+#include <signal.h>
 
 struct clientOptions
 {
@@ -18,13 +19,18 @@ struct clientOptions
 
 static void options_init(struct clientOptions *opts);
 static void parse_client_arguments(int argc, char *argv[], struct clientOptions *opts);
-static void monitor_file(int clientSocket);
-static void send_message(int clientSocket, char *message);
+static void monitor_file();
+static void send_message(char *fileName, char *event);
+static void handleCtrlC(int signum);
 
 #define DEFAULT_PORT 5000
 #define SIZE 1024
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define EVENT_BUF_LEN (1024 * (EVENT_SIZE + 16))
+
+int fd;
+int wd;
+int client_Socket;
 
 int main (int argc, char *argv[]) {
     struct clientOptions opts;
@@ -32,13 +38,16 @@ int main (int argc, char *argv[]) {
     options_init(&opts);
     parse_client_arguments(argc, argv, &opts);
 
-    int clientSocket, ret;
+    if (signal(SIGINT, handleCtrlC) == SIG_ERR) {
+        fprintf(stderr, "Unable to register signal handler\n");
+        return 1;
+    }
+
+    int ret;
     struct sockaddr_in serverAddr;
 
-    FILE *fp;
-
-    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocket < 0) {
+    client_Socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_Socket < 0) {
         error_errno(__FILE__, __func__ , __LINE__, errno, 2);
     }
     printf("[+]Client socket is created.\n");
@@ -48,23 +57,21 @@ int main (int argc, char *argv[]) {
     serverAddr.sin_port = htons(opts.port);
     serverAddr.sin_addr.s_addr = inet_addr(opts.server_ip);
 
-    ret = connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    ret = connect(client_Socket, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
     if (ret < 0) {
         error_errno(__FILE__, __func__ , __LINE__, errno, 2);
     }
     printf("[+]Connect to Server.\n");
 
-    monitor_file(clientSocket);
+    monitor_file();
 
-    close(clientSocket);
+    close(client_Socket);
 
     return EXIT_SUCCESS;
 }
 
-void monitor_file(int clientSocket) {
+void monitor_file() {
     int length, i = 0;
-    int fd;
-    int wd;
     char buffer[EVENT_BUF_LEN];
 
     // Initialize inotify
@@ -95,14 +102,11 @@ void monitor_file(int clientSocket) {
             struct inotify_event* event = (struct inotify_event*)&buffer[i];
             if (event->len) {
                 if (event->mask & IN_CREATE) {
-                    printf("File %s created.\n", event->name);
-                    send_message(clientSocket, "File created.\n");
+                    send_message(event->name,  "created");
                 } else if (event->mask & IN_DELETE) {
-                    printf("File %s deleted.\n", event->name);
-                    send_message(clientSocket, "File deleted.\n");
+                    send_message(event->name,  "deleted");
                 } else if (event->mask & IN_MODIFY) {
-                    printf("File %s modified.\n", event->name);
-                    send_message(clientSocket, "File modified.\n");
+                    send_message(event->name,  "modified");
                 }
             }
             i += EVENT_SIZE + event->len;
@@ -115,9 +119,18 @@ void monitor_file(int clientSocket) {
     close(fd);
 }
 
-static void send_message(int clientSocket, char *message){
+static void send_message(char *fileName, char *event) {
+    int requiredSize = snprintf(NULL, 0, "File %s %s.\n", fileName, event);
+    char *message = (char *)malloc(requiredSize + 1);  // +1 for the null terminator
+
+    if (message == NULL) {
+        perror("Error: Memory allocation failed\n");
+    }
+
+    sprintf(message, "File %s %s.\n", fileName, event);
+
     // Send data to the server
-    ssize_t bytes_sent = send(clientSocket, message, strlen(message), 0);
+    ssize_t bytes_sent = send(client_Socket, message, strlen(message), 0);
     if (bytes_sent == -1) {
         perror("Error sending data");
         exit(EXIT_FAILURE);
@@ -164,4 +177,15 @@ static void parse_client_arguments(int argc, char *argv[], struct clientOptions 
 
     if (!is_serverip_set)
         error_message(__FILE__, __func__ , __LINE__, "\"Server IP must be included\"", 5);
+}
+
+static void handleCtrlC(int signum) {
+    printf("Ctrl+C detected. Exiting...\n");
+
+    close(client_Socket);
+    inotify_rm_watch(fd, wd);
+    close(fd);
+
+    // Terminate the program
+    exit(signum);
 }

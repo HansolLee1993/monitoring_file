@@ -21,9 +21,3 @@ void create_directory(const char *dir) {
         }
     mkdir(tmp, S_IRWXU);
 }
-
-char * append(char * string1, char * string2) {
-    char * result = NULL;
-    sprintf(&result, "%s%s", string1, string2);
-    return result;
-}
