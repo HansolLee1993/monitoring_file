@@ -19,7 +19,8 @@ struct serverOptions
 static void options_init(struct serverOptions *opts);
 static void parse_server_arguments(int argc, char *argv[], struct serverOptions *opts);
 static int log_message(int newSocket, struct serverOptions *opts);
-static void handleCtrlC(int signum);
+static void set_signal_handler();
+static void handle_ctrlC(int signum);
 
 #define SIZE 1024
 #define DEFAULT_LOG_FILE_LOCATION "../server"
@@ -34,6 +35,7 @@ int main (int argc, char *argv[]) {
 
     options_init(&opts);
     parse_server_arguments(argc, argv, &opts);
+    set_signal_handler();
 
     int ret;
     struct sockaddr_in serverAddr;
@@ -64,11 +66,6 @@ int main (int argc, char *argv[]) {
     else
         error_errno(__FILE__, __func__ , __LINE__, errno, 2);
 
-    if (signal(SIGINT, handleCtrlC) == SIG_ERR) {
-        fprintf(stderr, "Unable to register signal handler\n");
-        return 1;
-    }
-
     while (1) {
         client_socket = accept(server_socket, (struct sockaddr*)&newAddr, &addr_size);
 
@@ -94,9 +91,16 @@ int main (int argc, char *argv[]) {
     return EXIT_SUCCESS;
 }
 
+static void set_signal_handler() {
+    if (signal(SIGINT, handle_ctrlC) == SIG_ERR) {
+        fprintf(stderr, "Unable to register signal handler\n");
+        perror("Unable to register signal handler\n");
+    }
+}
+
 static void parse_server_arguments(int argc, char *argv[], struct serverOptions *opts) {
     int c;
-    while ((c = getopt(argc, argv, "d:p:")) != -1) {
+    while ((c = getopt(argc, argv, "p:")) != -1) {
         switch(c) {
             case 'p':
             {
@@ -116,7 +120,7 @@ static void parse_server_arguments(int argc, char *argv[], struct serverOptions 
     printf("[+]Port: %hu\n", opts->port);
 }
 
-static void handleCtrlC(int signum) {
+static void handle_ctrlC(int signum) {
     printf("Ctrl+C detected. Exiting...\n");
 
     // Close the socket
@@ -136,8 +140,8 @@ static int log_message(int newSocket, struct serverOptions *opts) {
     strcat(filename, postFix);
 
     while (1) {
-        char buffer[SIZE];
-        ssize_t bytes_received = recv(newSocket, buffer, sizeof(buffer), 0);
+        char message[SIZE];
+        ssize_t bytes_received = recv(newSocket, message, sizeof(message), 0);
         if (bytes_received <= 0) {
             if (bytes_received == 0) {
                 printf("Client disconnected.\n");
@@ -151,12 +155,18 @@ static int log_message(int newSocket, struct serverOptions *opts) {
             exit(EXIT_SUCCESS);
         }
 
-        printf("Received message from client: %.*s\n", (int)bytes_received, buffer);
+        // clean up the file
+        if (strcmp(message, "start") == 0) {
+            remove(filename);
+            continue;
+        }
+
+        printf("Received message from client: %.*s\n", (int)bytes_received, message);
 
         FILE *file;
         file = fopen(filename, "a");
         // Write the log message to the log file
-        fprintf(file, "%s", buffer);
+        fprintf(file, "%s", message);
 
         fclose(file);
     }

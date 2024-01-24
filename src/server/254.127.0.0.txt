@@ -1,0 +1,184 @@
+File passwd.71343 created.
+File passwd.71343 modified.
+File passwd.lock created.
+.
+File passwd.71343 deleted.
+
+File shadow.71343 created.
+
+File shadow.71343 modified.
+File shadow.lock created.
+.
+File shadow.71343 deleted.
+
+File group.71343 created.
+
+
+File group.71343 modified.
+
+File group.lock created.
+.
+
+File group.71343 deleted.
+
+
+File gshadow.71343 created.
+File gshadow.71343 modified.
+File gshadow.lock created.
+.
+File gshadow.71343 deleted.
+
+File subuid.71343 created.
+
+
+File subuid.71343 modified.
+
+File subuid.lock created.
+.
+
+File subuid.71343 deleted.
+
+
+File subgid.71343 created.
+
+
+File subgid.71343 modified.
+
+File subgid.lock created.
+.
+
+File subgid.71343 deleted.
+
+
+File passwd- modified.
+ed.
+
+
+File passwd- modified.
+ed.
+
+
+File passwd+ created.
+
+ed.
+
+
+File passwd+ modified.
+ed.
+
+
+File passwd.lock deleted.
+
+
+
+File shadow- modified.
+d.
+
+
+
+File shadow- modified.
+d.
+
+
+
+File shadow+ created.
+
+d.
+
+
+
+File shadow+ modified.
+d.
+
+
+
+File shadow.lock deleted.
+
+
+
+File group- modified.
+ed.
+
+
+
+File group+ created.
+
+ed.
+
+
+
+File group+ modified.
+ed.
+
+
+
+File group.lock deleted.
+
+
+
+
+File gshadow- modified.
+
+
+
+
+
+File gshadow- modified.
+
+
+
+
+
+File gshadow+ created.
+
+
+
+
+
+
+File gshadow+ modified.
+
+
+
+
+
+File gshadow.lock deleted.
+
+
+File subuid- modified.
+ed.
+
+
+File subuid+ created.
+
+ed.
+
+
+File subuid+ modified.
+ed.
+
+
+File subuid.lock deleted.
+
+
+
+File subgid- modified.
+d.
+
+
+
+File subgid+ created.
+
+d.
+
+
+
+File subgid+ modified.
+d.
+
+
+
+File subgid.lock deleted.
+
+
+

@@ -20,8 +20,10 @@ struct clientOptions
 static void options_init(struct clientOptions *opts);
 static void parse_client_arguments(int argc, char *argv[], struct clientOptions *opts);
 static void monitor_file();
-static void send_message(char *fileName, char *event);
-static void handleCtrlC(int signum);
+static void set_event_message(char *fileName, char *event);
+static void send_message(char *message);
+static void handle_ctrlC(int signum);
+static void set_signal_handler();
 
 #define DEFAULT_PORT 5000
 #define SIZE 1024
@@ -37,11 +39,7 @@ int main (int argc, char *argv[]) {
 
     options_init(&opts);
     parse_client_arguments(argc, argv, &opts);
-
-    if (signal(SIGINT, handleCtrlC) == SIG_ERR) {
-        fprintf(stderr, "Unable to register signal handler\n");
-        return 1;
-    }
+    set_signal_handler();
 
     int ret;
     struct sockaddr_in serverAddr;
@@ -50,6 +48,7 @@ int main (int argc, char *argv[]) {
     if (client_Socket < 0) {
         error_errno(__FILE__, __func__ , __LINE__, errno, 2);
     }
+
     printf("[+]Client socket is created.\n");
 
     memset(&serverAddr, '\0', sizeof(serverAddr));
@@ -89,7 +88,7 @@ void monitor_file() {
     }
 
     printf("Monitoring /etc/shadow for changes...\n");
-
+    send_message( "start");
     while (1) {
         // Read events
         length = read(fd, buffer, EVENT_BUF_LEN);
@@ -102,11 +101,11 @@ void monitor_file() {
             struct inotify_event* event = (struct inotify_event*)&buffer[i];
             if (event->len) {
                 if (event->mask & IN_CREATE) {
-                    send_message(event->name,  "created");
+                    set_event_message(event->name,  "created");
                 } else if (event->mask & IN_DELETE) {
-                    send_message(event->name,  "deleted");
+                    set_event_message(event->name,  "deleted");
                 } else if (event->mask & IN_MODIFY) {
-                    send_message(event->name,  "modified");
+                    set_event_message(event->name,  "modified");
                 }
             }
             i += EVENT_SIZE + event->len;
@@ -119,7 +118,7 @@ void monitor_file() {
     close(fd);
 }
 
-static void send_message(char *fileName, char *event) {
+static void set_event_message(char *fileName, char *event) {
     int requiredSize = snprintf(NULL, 0, "File %s %s.\n", fileName, event);
     char *message = (char *)malloc(requiredSize + 1);  // +1 for the null terminator
 
@@ -129,6 +128,11 @@ static void send_message(char *fileName, char *event) {
 
     sprintf(message, "File %s %s.\n", fileName, event);
 
+    send_message(message);
+}
+
+static void send_message(char * message)
+{
     // Send data to the server
     ssize_t bytes_sent = send(client_Socket, message, strlen(message), 0);
     if (bytes_sent == -1) {
@@ -179,7 +183,7 @@ static void parse_client_arguments(int argc, char *argv[], struct clientOptions 
         error_message(__FILE__, __func__ , __LINE__, "\"Server IP must be included\"", 5);
 }
 
-static void handleCtrlC(int signum) {
+static void handle_ctrlC(int signum) {
     printf("Ctrl+C detected. Exiting...\n");
 
     close(client_Socket);
@@ -188,4 +192,11 @@ static void handleCtrlC(int signum) {
 
     // Terminate the program
     exit(signum);
+}
+
+static void set_signal_handler() {
+    if (signal(SIGINT, handle_ctrlC) == SIG_ERR) {
+        fprintf(stderr, "Unable to register signal handler\n");
+        perror("Unable to register signal handler\n");
+    }
 }
