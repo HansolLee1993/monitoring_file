@@ -72,16 +72,15 @@ int main (int argc, char *argv[]) {
         if (client_socket < 0)
             error_errno(__FILE__, __func__ , __LINE__, errno, 2);
 
-        //set current input ip
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &newAddr.sin_addr, client_ip, sizeof(client_ip));
         opts.ip_in = inet_ntoa(newAddr.sin_addr);
-
         printf("[+]Connection accept from %s:%d\n", opts.ip_in, opts.port);
 
         if ((childip = fork()) == 0) {
             close(server_socket);
 
             if (log_message(client_socket, &opts) == 0) {
-                printf("Text has been appended to 'log.txt'.\n");
                 break;
             }
         }
@@ -138,9 +137,10 @@ static int log_message(int newSocket, struct serverOptions *opts) {
     char filename[strlen(opts->ip_in) + strlen(postFix) + 1];  // Adjust the size as needed
     strcpy(filename, opts->ip_in);
     strcat(filename, postFix);
+    FILE *file;
+    char message[SIZE];
 
     while (1) {
-        char message[SIZE];
         ssize_t bytes_received = recv(newSocket, message, sizeof(message), 0);
         if (bytes_received <= 0) {
             if (bytes_received == 0) {
@@ -152,24 +152,23 @@ static int log_message(int newSocket, struct serverOptions *opts) {
             // Cleanup and close the socket
             close(client_socket);
             close(server_socket);
+            fclose(file);
             exit(EXIT_SUCCESS);
         }
 
-        // clean up the file
         if (strcmp(message, "start") == 0) {
             remove(filename);
+            file = fopen(filename, "a");
             continue;
         }
+        message[bytes_received] = '\0';
+        printf("Received message from client :%s\n", message);
 
-        printf("Received message from client: %.*s\n", (int)bytes_received, message);
-
-        FILE *file;
-        file = fopen(filename, "a");
         // Write the log message to the log file
         fprintf(file, "%s", message);
-
-        fclose(file);
+        fflush(file);
     }
+    fclose(file);
     return EXIT_SUCCESS;
 }
 
